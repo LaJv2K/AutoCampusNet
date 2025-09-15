@@ -371,8 +371,11 @@ func getLocalIPs() (ipv4, ipv6 string, err error) {
 			if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
 				if ip4 := ipnet.IP.To4(); ip4 != nil {
 					ipv4 = ip4.String()
-				} else if ip6 := ipnet.IP.To16(); ip6 != nil {
-					ipv6 = ip6.String()
+				} else if ip6 := ipnet.IP.To16(); ip6 != nil && ipnet.IP.To4() == nil {
+					// Skip link-local addresses (fe80::/10)
+					if !ip6.IsLinkLocalUnicast() && !ip6.IsLinkLocalMulticast() {
+						ipv6 = ip6.String()
+					}
 				}
 			}
 		}
