@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>校园网认证配置</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>校园网自动认证助手</h1>
+            <div class="status" id="status">
+                <span class="status-indicator" id="statusIndicator"></span>
+                <span id="statusText">检查中...</span>
+            </div>
+        </header>
+
+        <main>
+            <!-- 初次配置引导 -->
+            <div class="section guide-section" id="guideSection" style="display: none;">
+                <h2>欢迎使用校园网自动认证助手</h2>
+                <div class="guide-content">
+                    <p>这是您第一次使用本程序，请按照以下步骤完成配置：</p>
+                    <ol class="guide-steps">
+                        <li>在下方输入您的校园网账号和密码</li>
+                        <li>点击“保存配置”按钮保存设置</li>
+                        <li>程序将自动监控网络状态并进行认证</li>
+                        <li>您可以通过系统托盘图标随时管理程序</li>
+                    </ol>
+                    <div class="guide-actions">
+                        <button type="button" class="btn btn-primary" id="startGuide">开始配置</button>
+                    </div>
+                </div>
+            </div>
+
+            <form id="configForm">
+                <div class="section basic-config">
+                    <h2>基本配置</h2>
+                    <div class="form-group">
+                        <label for="account">账号:</label>
+                        <input type="text" id="account" name="account" value="{{.Account}}" required 
+                               placeholder="请输入校园网账号">
+                    </div>
+                    <div class="form-group">
+                        <label for="password">密码:</label>
+                        <input type="password" id="password" name="password" value="{{.Password}}" required 
+                               placeholder="请输入校园网密码">
+                    </div>
+                    <div class="form-group">
+                        <label for="checkInterval">检查间隔（秒）:</label>
+                        <input type="number" id="checkInterval" name="checkInterval" value="{{.CheckInterval}}" 
+                               min="10" max="300" placeholder="30">
+                    </div>
+                </div>
+
+                <div class="section advanced-config" id="advancedConfig">
+                    <h2>
+                        <span>高级配置</span>
+                        <button type="button" id="toggleAdvanced" class="toggle-btn">展开</button>
+                    </h2>
+                    <div class="advanced-content" id="advancedContent">
+                        <div class="form-group">
+                            <label for="checkURL">检查URL:</label>
+                            <input type="url" id="checkURL" name="checkURL" value="{{.CheckURL}}" 
+                                   placeholder="http://10.10.102.50:801/eportal/portal/online_list">
+                        </div>
+                        <div class="form-group">
+                            <label for="loginURL">登录URL:</label>
+                            <textarea id="loginURL" name="loginURL" rows="3" 
+                                    placeholder="http://10.10.102.50:801/eportal/portal/login?...">{{.LoginURL}}</textarea>
+                        </div>
+                        <div class="form-group checkbox-group">
+                            <input type="checkbox" id="autoStart" name="autoStart" {{if .AutoStart}}checked{{end}}>
+                            <label for="autoStart">开机自启动</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button type="submit" class="btn btn-primary" id="saveBtn">保存配置</button>
+                    <button type="button" class="btn btn-secondary" id="authBtn">手动认证</button>
+                    <button type="button" class="btn btn-info" id="statusBtn">检查状态</button>
+                    <button type="button" class="btn btn-danger" id="exitBtn">退出程序</button>
+                </div>
+            </form>
+        </main>
+
+        <footer>
+            <div class="logs" id="logs">
+                <h3>
+                    <span>运行日志</span>
+                    <button type="button" id="clearLogs" class="btn btn-small">清空</button>
+                </h3>
+                <div class="log-content" id="logContent">
+                    程序启动...
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <div class="notification" id="notification">
+        <span id="notificationText"></span>
+        <button id="closeNotification">&times;</button>
+    </div>
+
+    <script>
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initializePage();
+        });
+
+        // 初始化页面
+        function initializePage() {
+            setupEventListeners();
+            loadStatus();
+            startStatusPolling();
+            checkFirstTime();
+        }
+
+        // 设置事件监听器
+        function setupEventListeners() {
+            // 高级配置展开/折叠
+            document.getElementById('toggleAdvanced').addEventListener('click', toggleAdvanced);
+
+            // 表单提交
+            document.getElementById('configForm').addEventListener('submit', handleConfigSubmit);
+
+            // 手动认证
+            document.getElementById('authBtn').addEventListener('click', manualAuth);
+
+            // 检查状态
+            document.getElementById('statusBtn').addEventListener('click', checkStatus);
+
+            // 退出程序
+            document.getElementById('exitBtn').addEventListener('click', exitProgram);
+
+            // 开始引导
+            document.getElementById('startGuide').addEventListener('click', startGuide);
+
+            // 清空日志
+            document.getElementById('clearLogs').addEventListener('click', clearLogs);
+
+            // 关闭通知
+            document.getElementById('closeNotification').addEventListener('click', closeNotification);
+        }
+
+        // 展开/折叠高级配置
+        function toggleAdvanced() {
+            const content = document.getElementById('advancedContent');
+            const btn = document.getElementById('toggleAdvanced');
+            if (content.style.display === 'none' || !content.style.display) {
+                content.style.display = 'block';
+                btn.textContent = '折叠';
+                btn.classList.add('expanded');
+            } else {
+                content.style.display = 'none';
+                btn.textContent = '展开';
+                btn.classList.remove('expanded');
+            }
+        }
+
+        // 处理配置提交
+        async function handleConfigSubmit(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const config = {
+                account: formData.get('account'),
+                password: formData.get('password'),
+                check_url: formData.get('checkURL'),
+                login_url: formData.get('loginURL'),
+                auto_start: formData.has('autoStart'),
+                check_interval: parseInt(formData.get('checkInterval')) || 30
+            };
+            try {
+                showLoading('saveBtn', '保存中...');
+                const response = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(config)
+                });
+                if (response.ok) {
+                    showNotification('配置已保存', 'success');
+                    addLog('配置保存成功');
+                } else {
+                    throw new Error('保存失败');
+                }
+            } catch (error) {
+                showNotification('保存配置失败: ' + error.message, 'error');
+                addLog('配置保存失败: ' + error.message);
+            } finally {
+                hideLoading('saveBtn', '保存配置');
+            }
+        }
+
+        // 手动认证
+        async function manualAuth() {
+            try {
+                showLoading('authBtn', '认证中...');
+                addLog('开始手动认证...');
+                const response = await fetch('/api/auth', {method: 'GET'});
+                const data = await response.json();
+                if (response.ok && data.ok) {
+                    showNotification('认证成功', 'success');
+                    addLog('手动认证成功');
+                    await loadStatus();
+                } else {
+                    const msg = (data && data.error) ? data.error : '未知错误';
+                    showNotification('认证失败: ' + msg, 'error');
+                    addLog('手动认证失败: ' + msg);
+                }
+            } catch (error) {
+                showNotification('手动认证失败: ' + error.message, 'error');
+                addLog('手动认证失败: ' + error.message);
+            } finally {
+                hideLoading('authBtn', '手动认证');
+            }
+        }
+
+        // 检查状态
+        async function checkStatus() {
+            try {
+                showLoading('statusBtn', '检查中...');
+                await loadStatus();
+            } finally {
+                hideLoading('statusBtn', '检查状态');
+            }
+        }
+
+        // 加载状态
+        async function loadStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                const indicator = document.getElementById('statusIndicator');
+                const text = document.getElementById('statusText');
+                if (data.error) {
+                    indicator.className = 'status-indicator error';
+                    text.textContent = '检查失败 ' + data.error;
+                    addLog('状态检查失败 ' + data.error);
+                } else if (data.online) {
+                    indicator.className = 'status-indicator success';
+                    text.textContent = '网络已连接';
+                    addLog('网络状态 已连接');
+                } else {
+                    indicator.className = 'status-indicator warning';
+                    text.textContent = '网络未连接';
+                    addLog('网络状态 未连接');
+                }
+            } catch (error) {
+                const indicator = document.getElementById('statusIndicator');
+                const text = document.getElementById('statusText');
+                indicator.className = 'status-indicator error';
+                text.textContent = '状态检查失败';
+                addLog('状态检查出错 ' + error.message);
+            }
+        }
+
+        // 开始状态轮询（30秒）
+        function startStatusPolling() {
+            setInterval(loadStatus, 30000);
+        }
+
+        // 显示加载状态
+        function showLoading(btnId, text) {
+            const btn = document.getElementById(btnId);
+            btn.disabled = true;
+            btn.textContent = text;
+            btn.classList.add('loading');
+        }
+
+        // 隐藏加载状态
+        function hideLoading(btnId, originalText) {
+            const btn = document.getElementById(btnId);
+            btn.disabled = false;
+            btn.textContent = originalText;
+            btn.classList.remove('loading');
+        }
+
+        // 显示通知
+        function showNotification(message, type = 'info') {
+            const notification = document.getElementById('notification');
+            const text = document.getElementById('notificationText');
+            text.textContent = message;
+            notification.className = 'notification show ' + type;
+            setTimeout(() => { notification.classList.remove('show'); }, 5000);
+        }
+
+        // 关闭通知
+        function closeNotification() {
+            document.getElementById('notification').classList.remove('show');
+        }
+
+        // 添加日志
+        function addLog(message) {
+            const logContent = document.getElementById('logContent');
+            const time = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            logEntry.textContent = `[${time}] ${message}`;
+            logContent.appendChild(logEntry);
+            logContent.scrollTop = logContent.scrollHeight;
+            const entries = logContent.children;
+            if (entries.length > 100) {
+                logContent.removeChild(entries[0]);
+            }
+        }
+
+        // 清空日志
+        function clearLogs() {
+            document.getElementById('logContent').innerHTML = '';
+            addLog('日志已清空');
+        }
+
+        // 退出程序
+        async function exitProgram() {
+            if (confirm('确定要退出程序吗？')) {
+                try {
+                    const response = await fetch('/api/exit', {method: 'POST'});
+                    if (response.ok) {
+                        showNotification('程序正在退出...', 'info');
+                        setTimeout(() => { window.close(); }, 1000);
+                    } else {
+                        throw new Error('退出失败');
+                    }
+                } catch (error) {
+                    showNotification('退出程序失败: ' + error.message, 'error');
+                }
+            }
+        }
+
+        // 检查是否首次使用
+        function checkFirstTime() {
+            const account = document.getElementById('account').value;
+            const password = document.getElementById('password').value;
+            if (!account || !password) {
+                document.getElementById('guideSection').style.display = 'block';
+                document.getElementById('configForm').style.display = 'none';
+            }
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('advanced') === 'true') {
+                toggleAdvanced();
+            }
+        }
+
+        // 开始引导
+        function startGuide() {
+            document.getElementById('guideSection').style.display = 'none';
+            document.getElementById('configForm').style.display = 'block';
+            addLog('开始配置向导');
+        }
+    </script>
+</body>
+</html>

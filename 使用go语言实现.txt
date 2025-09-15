@@ -1,0 +1,33 @@
+使用go语言实现
+我想做一个连接校园网后自动认证 掉线后自动认证的程序 一直在后台运行 保持网络自动连接
+我需要一个简洁的配置界面 可以在命令行 或者跳出一个html页面 来配置
+获取认证状态的方法是：
+GET 访问 http://10.10.102.50:801/eportal/portal/online_list
+返回内容是
+jsonpReturn({"result":0,"msg":"获取用户在线信息数据为空！"});
+或者其他 但是格式相同
+如果result的value是0说明未连接 是1说明连接
+条件判断 如果是0 则需要自动连接
+认证的方式是：
+GET访问
+http://10.10.102.50:801/eportal/portal/login?callback=dr1005&login_method=1&user_account=%2C0%2C{account}%40unicom&user_password={password}&wlan_user_ip={wlan_user_ip}&wlan_user_ipv6={wlan_user_ipv6}&wlan_user_mac=000000000000&wlan_ac_ip=&wlan_ac_name=&jsVersion=4.1.3&terminal_type=1
+
+其中中括号{}及其内部需要被替换
+所以需要先获取本机在局域网中的ipv4和ipv6地址
+wlan_user_ipv6 example:
+2001:da8:a005:31a::4:21ee变为
+2001%3A0da8%3Aa005%3A031a%3A0000%3A0000%3A0004%3A21ee
+
+提供一个web配置页面 
+将程序的输入框提示信息改为中文
+在网络掉线自动重连后弹出windows提示 支持windows10和windows11
+在初次配置时引导用户进行配置（配置账号 密码） 并且将专业配置进行隐藏（比如检查URL和登录URL）但是可以展开
+将程序设置为开机自启 并且提醒用户 这个选项和专业配置一同放在隐藏菜单里
+隐藏命令行窗口 将运行日志输出到个人目录下 一个日志文件夹（你自己取名）
+默认开启开机自启 并且隐藏命令框
+通知改为 windows10那个现代化通知 不要用win32的
+提供一个退出按钮
+配置多开检测功能 防止多开 第二次运行程序时 打开web前端页面 并且不再第二次运行程序
+不要反复弹出认证失败的通知 只通知一次就好
+添加一个托盘图标 方便用户随时关闭程序
+右键托盘图标后弹出的菜单应该是高清的
